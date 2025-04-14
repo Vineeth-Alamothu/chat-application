@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import {
   TelepartyClient,
-  type SocketEventHandler,
+  type SocketEventHandler, 
   SocketMessageTypes,
   type SessionChatMessage,
 } from "teleparty-websocket-lib"
@@ -14,6 +14,7 @@ import "../styles/ChatRoom.css"
 interface SendMessageData {
   body: string
 }
+
 
 interface SetTypingMessageData {
   typing: boolean
