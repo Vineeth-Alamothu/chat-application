@@ -1,5 +1,3 @@
-"use client"
-
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate } from "react-router-dom"
@@ -13,7 +11,6 @@ import Message from "./Message"
 import TypingIndicator from "./TypingIndicator"
 import "../styles/ChatRoom.css"
 
-// Define interfaces based on the documentation
 interface SendMessageData {
   body: string
 }
@@ -34,7 +31,7 @@ const ChatRoom: React.FC = () => {
   const [messages, setMessages] = useState<SessionChatMessage[]>([])
   const [messageInput, setMessageInput] = useState("")
   const [isConnected, setIsConnected] = useState(false)
-  const [isJoining, setIsJoining] = useState(true) // Start with joining state
+  const [isJoining, setIsJoining] = useState(true)
   const [error, setError] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [usersTyping, setUsersTyping] = useState<string[]>([])
@@ -45,19 +42,17 @@ const ChatRoom: React.FC = () => {
   const roomIdRef = useRef<string | undefined>(roomId)
   const clientRef = useRef<TelepartyClient | null>(null)
 
-  // Get user info from localStorage
-  const userNickname = localStorage.getItem("userNickname") || "Anonymous"
-  const userIcon = localStorage.getItem("userIcon") || ""
+  // Use refs instead of variables for static localStorage values
+  const userNicknameRef = useRef(localStorage.getItem("userNickname") || "Anonymous")
+  const userIconRef = useRef(localStorage.getItem("userIcon") || "")
 
-  // Initialize client and set up event handlers
   useEffect(() => {
     console.log("Initializing client...")
 
-    // Set a timeout for connection
     connectionTimeoutRef.current = setTimeout(() => {
       setError("Connection timeout. Please try refreshing the page.")
       setIsJoining(false)
-    }, 15000) // 15 seconds timeout
+    }, 15000)
 
     const joinChatRoom = async (client: TelepartyClient) => {
       if (!roomIdRef.current) {
@@ -69,20 +64,20 @@ const ChatRoom: React.FC = () => {
       try {
         console.log("Joining chat room:", roomIdRef.current)
 
-        // Join the chat room with nickname and userIcon
-        await client.joinChatRoom(userNickname, roomIdRef.current, userIcon || undefined)
+        await client.joinChatRoom(
+          userNicknameRef.current,
+          roomIdRef.current,
+          userIconRef.current || undefined
+        )
 
         console.log("Successfully joined chat room")
         setIsConnected(true)
         setIsJoining(false)
-
-        // We'll identify our own messages by comparing nicknames
         setCurrentUserId("current-user")
 
-        // Add welcome message
         const welcomeMessage: SessionChatMessage = {
           isSystemMessage: true,
-          body: `Welcome to room ${roomIdRef.current}! You've joined as ${userNickname}`,
+          body: `Welcome to room ${roomIdRef.current}! You've joined as ${userNicknameRef.current}`,
           permId: "system",
           timestamp: Date.now(),
           userNickname: "System",
@@ -90,22 +85,21 @@ const ChatRoom: React.FC = () => {
         setMessages([welcomeMessage])
       } catch (err) {
         console.error("Failed to join chat room:", err)
-        setError(`Failed to join chat room: ${err instanceof Error ? err.message : "Unknown error"}`)
+        setError(
+          `Failed to join chat room: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }`
+        )
         setIsJoining(false)
       }
     }
 
-    // Create event handler
     const eventHandler: SocketEventHandler = {
       onConnectionReady: async () => {
         console.log("Connection established")
-
-        // Clear any pending timeout
         if (connectionTimeoutRef.current) {
           clearTimeout(connectionTimeoutRef.current)
         }
-
-        // Join the chat room now that the connection is ready
         if (clientRef.current) {
           await joinChatRoom(clientRef.current)
         }
@@ -120,8 +114,10 @@ const ChatRoom: React.FC = () => {
         if (message.type === SocketMessageTypes.SEND_MESSAGE) {
           const chatMessage = message.data as SessionChatMessage
 
-          // If this is our own message, store the permId for future reference
-          if (chatMessage.userNickname === userNickname && !chatMessage.isSystemMessage) {
+          if (
+            chatMessage.userNickname === userNicknameRef.current &&
+            !chatMessage.isSystemMessage
+          ) {
             setCurrentUserId(chatMessage.permId)
           }
 
@@ -133,28 +129,17 @@ const ChatRoom: React.FC = () => {
       },
     }
 
-    // Create a new client instance with the event handler
     const newClient = new TelepartyClient(eventHandler)
     setClient(newClient)
     clientRef.current = newClient
 
     return () => {
-      // Clean up on component unmount
       if (connectionTimeoutRef.current) {
         clearTimeout(connectionTimeoutRef.current)
-      }
-
-      if (clientRef.current) {
-        try {
-          // If there's a way to notify the server we're leaving, do it here
-        } catch (err) {
-          console.error("Error during cleanup:", err)
-        }
       }
     }
   }, [])
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
@@ -169,9 +154,8 @@ const ChatRoom: React.FC = () => {
 
       await client.sendMessage(SocketMessageTypes.SEND_MESSAGE, messageData)
       setMessageInput("")
-
-      // Reset typing status
       setIsTyping(false)
+
       if (client) {
         const typingData: SetTypingMessageData = { typing: false }
         client.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
@@ -185,7 +169,6 @@ const ChatRoom: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessageInput(e.target.value)
 
-    // Handle typing indicator
     if (!isTyping && e.target.value.trim()) {
       setIsTyping(true)
       if (client) {
@@ -194,12 +177,10 @@ const ChatRoom: React.FC = () => {
       }
     }
 
-    // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
 
-    // Set new timeout to stop typing indicator after 2 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
       if (isTyping) {
         setIsTyping(false)
@@ -220,7 +201,6 @@ const ChatRoom: React.FC = () => {
   const copyRoomIdToClipboard = () => {
     if (roomId) {
       navigator.clipboard.writeText(roomId)
-      // Show temporary notification (could be improved with a toast)
       const roomIdElement = document.getElementById("room-id-text")
       if (roomIdElement) {
         const originalText = roomIdElement.textContent
@@ -252,11 +232,17 @@ const ChatRoom: React.FC = () => {
           </div>
         </div>
         <div className="user-info">
-          <span className="user-nickname">{userNickname}</span>
-          {userIcon ? (
-            <img src={userIcon || "/placeholder.svg"} alt="User avatar" className="user-avatar" />
+          <span className="user-nickname">{userNicknameRef.current}</span>
+          {userIconRef.current ? (
+            <img
+              src={userIconRef.current || "/placeholder.svg"}
+              alt="User avatar"
+              className="user-avatar"
+            />
           ) : (
-            <div className="user-avatar-placeholder">{userNickname.charAt(0).toUpperCase()}</div>
+            <div className="user-avatar-placeholder">
+              {userNicknameRef.current.charAt(0).toUpperCase()}
+            </div>
           )}
         </div>
         <button className="leave-button" onClick={leaveRoom}>
@@ -273,12 +259,16 @@ const ChatRoom: React.FC = () => {
               <Message
                 key={index}
                 message={message}
-                isOwnMessage={message.userNickname === userNickname && !message.isSystemMessage}
-                userNickname={userNickname}
-                userIcon={userIcon}
+                isOwnMessage={
+                  message.userNickname === userNicknameRef.current &&
+                  !message.isSystemMessage
+                }
+                userNickname={userNicknameRef.current}
+                userIcon={userIconRef.current}
               />
             ))}
-            {usersTyping.length > 0 && !usersTyping.includes(currentUserId) && <TypingIndicator />}
+            {usersTyping.length > 0 &&
+              !usersTyping.includes(currentUserId) && <TypingIndicator />}
           </>
         )}
         <div ref={messagesEndRef} />
@@ -295,7 +285,11 @@ const ChatRoom: React.FC = () => {
           placeholder="Type a message..."
           disabled={!isConnected}
         />
-        <button className="send-button" onClick={sendMessage} disabled={!isConnected || !messageInput.trim()}>
+        <button
+          className="send-button"
+          onClick={sendMessage}
+          disabled={!isConnected || !messageInput.trim()}
+        >
           Send
         </button>
       </div>
