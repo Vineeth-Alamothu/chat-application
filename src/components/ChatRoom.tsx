@@ -32,7 +32,6 @@ const ChatRoom: React.FC = () => {
   const [messageInput, setMessageInput] = useState("")
   const [isConnected, setIsConnected] = useState(false)
   const [isJoining, setIsJoining] = useState(true)
-  const [error, setError] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [usersTyping, setUsersTyping] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -42,35 +41,26 @@ const ChatRoom: React.FC = () => {
   const roomIdRef = useRef<string | undefined>(roomId)
   const clientRef = useRef<TelepartyClient | null>(null)
 
-  // Use refs instead of variables for static localStorage values
   const userNicknameRef = useRef(localStorage.getItem("userNickname") || "Anonymous")
   const userIconRef = useRef(localStorage.getItem("userIcon") || "")
 
   useEffect(() => {
-    console.log("Initializing client...")
-
     connectionTimeoutRef.current = setTimeout(() => {
-      setError("Connection timeout. Please try refreshing the page.")
       setIsJoining(false)
     }, 15000)
 
     const joinChatRoom = async (client: TelepartyClient) => {
       if (!roomIdRef.current) {
-        setError("Invalid room ID")
         setIsJoining(false)
         return
       }
 
       try {
-        console.log("Joining chat room:", roomIdRef.current)
-
         await client.joinChatRoom(
           userNicknameRef.current,
           roomIdRef.current,
           userIconRef.current || undefined
         )
-
-        console.log("Successfully joined chat room")
         setIsConnected(true)
         setIsJoining(false)
         setCurrentUserId("current-user")
@@ -83,34 +73,22 @@ const ChatRoom: React.FC = () => {
           userNickname: "System",
         }
         setMessages([welcomeMessage])
-      } catch (err) {
-        console.error("Failed to join chat room:", err)
-        setError(
-          `Failed to join chat room: ${
-            err instanceof Error ? err.message : "Unknown error"
-          }`
-        )
+      } catch {
         setIsJoining(false)
       }
     }
 
     const eventHandler: SocketEventHandler = {
       onConnectionReady: async () => {
-        console.log("Connection established")
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current)
-        }
+        if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
         if (clientRef.current) {
           await joinChatRoom(clientRef.current)
         }
       },
       onClose: () => {
-        console.log("Connection closed")
         setIsConnected(false)
-        setError("Disconnected from chat room")
       },
       onMessage: (message) => {
-        console.log("Received message:", message)
         if (message.type === SocketMessageTypes.SEND_MESSAGE) {
           const chatMessage = message.data as SessionChatMessage
 
@@ -160,10 +138,7 @@ const ChatRoom: React.FC = () => {
         const typingData: SetTypingMessageData = { typing: false }
         client.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
       }
-    } catch (err) {
-      console.error("Failed to send message:", err)
-      setError("Failed to send message")
-    }
+    } catch {}
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -273,8 +248,6 @@ const ChatRoom: React.FC = () => {
         )}
         <div ref={messagesEndRef} />
       </div>
-
-      {error && <div className="error-banner">{error}</div>}
 
       <div className="chat-input">
         <input
