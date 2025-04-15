@@ -1,0 +1,24 @@
+{
+  "name": "teleparty-websocket-lib",
+  "version": "1.0.4",
+  "description": "",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MCElmo/teleparty-websocket-lib.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MCElmo/teleparty-websocket-lib/issues"
+  },
+  "homepage": "https://github.com/MCElmo/teleparty-websocket-lib#readme",
+  "devDependencies": {
+    "typescript": "^4.5.5"
+  }
+}
