@@ -29,16 +29,6 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        
-    - name: Configure npm for private packages
-      run: |
-        echo "//npm.pkg.github.com/:_authToken=${{ secrets.GH_TOKEN }}" > .npmrc
-        echo "@watchparty-org:registry=https://npm.pkg.github.com" >> .npmrc
-        npm config set @watchparty-org:registry https://npm.pkg.github.com
-        npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GH_TOKEN }}
-        
-    - name: Install dependencies
-      run: npm i
       
     - name: Build project
       run: npm run build
