@@ -9,8 +9,8 @@ const App: React.FC = () => {
     <Router>
       <div className="app-container">
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/chat/:roomId" element={<ChatRoom />} />
+          <Route path="/chat-application" element={<Home />} />
+          <Route path="/chat-application/chat/:roomId" element={<ChatRoom />} />
         </Routes>
       </div>
     </Router>

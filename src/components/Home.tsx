@@ -80,7 +80,7 @@ const Home: React.FC = () => {
       const roomId = await client.createChatRoom(nickname, userIcon || undefined)
 
       // Navigate to the chat room
-      navigate(`/chat/${roomId}`)
+      navigate(`/chat-application/chat/${roomId}`)
     } catch (err) {
       console.error("Failed to create room:", err)
       setError(`Failed to create room: ${err instanceof Error ? err.message : "Unknown error"}`)
@@ -106,7 +106,7 @@ const Home: React.FC = () => {
       if (userIcon) localStorage.setItem("userIcon", userIcon)
 
       // Navigate to the chat room
-      navigate(`/chat/${joinRoomId}`)
+      navigate(`/chat-application/chat/${joinRoomId}`)
     } catch (err) {
       setError("Failed to join room. Please try again.")
       console.error(err)
