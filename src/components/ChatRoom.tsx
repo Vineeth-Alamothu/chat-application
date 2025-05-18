@@ -26,24 +26,22 @@ interface TypingMessageData {
   typingUsers?: { [key: string]: string }
 }
 
-// Extend the base SessionChatMessage type to include isSent
 interface SessionChatMessage extends BaseSessionChatMessage {
   isSent?: boolean
 }
 
 const CHAT_HISTORY_KEY = "chat_history"
 const MAX_HISTORY_MESSAGES = 50
-const CONNECTION_TIMEOUT = 10000 // 10 seconds
-const RECONNECT_DELAY = 2000 // 2 seconds
-const MAX_RECONNECT_ATTEMPTS = 3 // Maximum number of reconnection attempts
-const JOIN_DELAY = 1000 // 1 second delay before joining room
-const INITIAL_CONNECTION_DELAY = 2000 // 2 seconds delay before initial connection
+const CONNECTION_TIMEOUT = 10000 
+const RECONNECT_DELAY = 2000 
+const MAX_RECONNECT_ATTEMPTS = 3 
+const JOIN_DELAY = 1000 
+const INITIAL_CONNECTION_DELAY = 2000 
 
 const ChatRoom: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
   
-  // State
   const [messages, setMessages] = useState<SessionChatMessage[]>([])
   const [messageInput, setMessageInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
@@ -58,14 +56,12 @@ const ChatRoom: React.FC = () => {
   const initialConnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [typingUsers, setTypingUsers] = useState<{ [key: string]: string }>({})
   
-  // Refs
   const clientRef = useRef<TelepartyClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
-  // User data from localStorage
   const userNickname = useRef(localStorage.getItem("userNickname") || "Anonymous")
   const userIcon = useRef(localStorage.getItem("userIcon") || "")
   const functionsRef = useRef<{
@@ -277,7 +273,6 @@ const ChatRoom: React.FC = () => {
     }
   }, [roomId])
 
-  // Save chat history
   useEffect(() => {
     if (messages.length > 0) {
       const historyToSave = messages.slice(-MAX_HISTORY_MESSAGES)
@@ -285,7 +280,6 @@ const ChatRoom: React.FC = () => {
     }
   }, [messages, roomId])
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
@@ -297,7 +291,6 @@ const ChatRoom: React.FC = () => {
       return
     }
 
-    // Reset reconnect attempts on mount
     setReconnectAttempts(0)
     initializeConnection()
 
@@ -349,7 +342,6 @@ const ChatRoom: React.FC = () => {
     }
   }
 
-  // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessageInput(e.target.value)
 
@@ -376,14 +368,12 @@ const ChatRoom: React.FC = () => {
     }, 2000)
   }
 
-  // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       sendMessage()
     }
   }
 
-  // Copy room ID to clipboard
   const copyRoomIdToClipboard = () => {
     if (roomId) {
       navigator.clipboard.writeText(roomId)
@@ -400,7 +390,6 @@ const ChatRoom: React.FC = () => {
     }
   }
 
-  // Leave room
   const leaveRoom = () => {
     localStorage.removeItem(`${CHAT_HISTORY_KEY}_${roomId}`)
     localStorage.removeItem("lastRoomId")
