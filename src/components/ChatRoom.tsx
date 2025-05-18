@@ -1,5 +1,5 @@
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import {
   TelepartyClient,
@@ -45,7 +45,7 @@ const ChatRoom: React.FC = () => {
   const userNicknameRef = useRef(localStorage.getItem("userNickname") || "Anonymous")
   const userIconRef = useRef(localStorage.getItem("userIcon") || "")
 
-  const createEventHandler = (): SocketEventHandler => ({
+  const createEventHandler = useCallback((): SocketEventHandler => ({
     onConnectionReady: async () => {
       if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
       if (clientRef.current) {
@@ -93,7 +93,7 @@ const ChatRoom: React.FC = () => {
         setUsersTyping(typingData.usersTyping.filter(id => id !== currentUserId))
       }
     },
-  })
+  }), [currentUserId])
 
   useEffect(() => {
     const savedNickname = localStorage.getItem("userNickname")
@@ -129,7 +129,7 @@ const ChatRoom: React.FC = () => {
         clientRef.current.teardown()
       }
     }
-  }, [])
+  }, [createEventHandler, navigate])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })

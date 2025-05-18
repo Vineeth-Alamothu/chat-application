@@ -1,5 +1,5 @@
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { TelepartyClient, type SocketEventHandler } from "teleparty-websocket-lib"
 import UserForm from "./UserForm"
@@ -21,6 +21,39 @@ const Home: React.FC = () => {
     return /^[a-zA-Z0-9-_]+$/.test(roomId)
   }
 
+  const handleJoinRoom = useCallback(async () => {
+    if (!joinRoomId) {
+      setError("Please enter a room ID")
+      return
+    }
+
+    if (!validateRoomId(joinRoomId)) {
+      setError("Invalid room ID format")
+      return
+    }
+
+    if (!nickname) {
+      setError("Please enter a nickname")
+      return
+    }
+
+    try {
+      setIsConnecting(true)
+      setError("")
+
+      localStorage.setItem("userNickname", nickname)
+      if (userIcon) localStorage.setItem("userIcon", userIcon)
+      localStorage.setItem("lastRoomId", joinRoomId)
+
+      navigate(`/chat-application/chat/${joinRoomId}`)
+    } catch (err) {
+      setError("Failed to join room. Please try again.")
+      console.error(err)
+    } finally {
+      setIsConnecting(false)
+    }
+  }, [joinRoomId, nickname, userIcon, navigate])
+
   useEffect(() => {
     const savedNickname = localStorage.getItem("userNickname")
     const savedIcon = localStorage.getItem("userIcon")
@@ -38,7 +71,7 @@ const Home: React.FC = () => {
         handleJoinRoom()
       }
     }
-  }, [])
+  }, [handleJoinRoom])
 
   useEffect(() => {
     const eventHandler: SocketEventHandler = {
@@ -105,39 +138,6 @@ const Home: React.FC = () => {
     } catch (err) {
       console.error("Failed to create room:", err)
       setError(`Failed to create room: ${err instanceof Error ? err.message : "Unknown error"}`)
-    } finally {
-      setIsConnecting(false)
-    }
-  }
-
-  const handleJoinRoom = async () => {
-    if (!joinRoomId) {
-      setError("Please enter a room ID")
-      return
-    }
-
-    if (!validateRoomId(joinRoomId)) {
-      setError("Invalid room ID format")
-      return
-    }
-
-    if (!nickname) {
-      setError("Please enter a nickname")
-      return
-    }
-
-    try {
-      setIsConnecting(true)
-      setError("")
-
-      localStorage.setItem("userNickname", nickname)
-      if (userIcon) localStorage.setItem("userIcon", userIcon)
-      localStorage.setItem("lastRoomId", joinRoomId)
-
-      navigate(`/chat-application/chat/${joinRoomId}`)
-    } catch (err) {
-      setError("Failed to join room. Please try again.")
-      console.error(err)
     } finally {
       setIsConnecting(false)
     }
