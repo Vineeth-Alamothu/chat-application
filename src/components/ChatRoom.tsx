@@ -238,6 +238,8 @@ const ChatRoom: React.FC = () => {
         </button>
       </div>
 
+      {error && <div className="error-banner">{error}</div>}
+
       <div className="chat-messages">
         {isJoining ? (
           <div className="connecting-message">Connecting to chat room...</div>
