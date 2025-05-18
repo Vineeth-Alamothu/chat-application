@@ -1,8 +1,19 @@
 .typing-indicator {
-    display: flex;
-    align-items: center;
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .typing-animation {
@@ -35,7 +46,6 @@
 }
 
 @keyframes bounce {
-
     0%,
     60%,
     100% {

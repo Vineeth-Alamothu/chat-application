@@ -5,9 +5,8 @@ import {
   TelepartyClient,
   type SocketEventHandler,
   SocketMessageTypes,
-  type SessionChatMessage,
+  type SessionChatMessage as BaseSessionChatMessage,
 } from "teleparty-websocket-lib"
-import Message from "./Message"
 import TypingIndicator from "./TypingIndicator"
 import "../styles/ChatRoom.css"
 
@@ -22,146 +21,306 @@ interface SetTypingMessageData {
 interface TypingMessageData {
   anyoneTyping: boolean
   usersTyping: string[]
+  userId?: string
+  userNickname?: string
+  typingUsers?: { [key: string]: string }
 }
+
+// Extend the base SessionChatMessage type to include isSent
+interface SessionChatMessage extends BaseSessionChatMessage {
+  isSent?: boolean
+}
+
+const CHAT_HISTORY_KEY = "chat_history"
+const MAX_HISTORY_MESSAGES = 50
+const CONNECTION_TIMEOUT = 10000 // 10 seconds
+const RECONNECT_DELAY = 2000 // 2 seconds
+const MAX_RECONNECT_ATTEMPTS = 3 // Maximum number of reconnection attempts
+const JOIN_DELAY = 1000 // 1 second delay before joining room
+const INITIAL_CONNECTION_DELAY = 2000 // 2 seconds delay before initial connection
 
 const ChatRoom: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
-  const [client, setClient] = useState<TelepartyClient | null>(null)
+  
+  // State
   const [messages, setMessages] = useState<SessionChatMessage[]>([])
   const [messageInput, setMessageInput] = useState("")
-  const [isConnected, setIsConnected] = useState(false)
-  const [isJoining, setIsJoining] = useState(true)
   const [isTyping, setIsTyping] = useState(false)
   const [usersTyping, setUsersTyping] = useState<string[]>([])
   const [error, setError] = useState<string>("")
+  const [isConnected, setIsConnected] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string>("")
+  const [reconnectAttempts, setReconnectAttempts] = useState(0)
+  const isConnectingRef = useRef(false)
+  const hasJoinedRef = useRef(false)
+  const joinTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const initialConnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [typingUsers, setTypingUsers] = useState<{ [key: string]: string }>({})
+  
+  // Refs
+  const clientRef = useRef<TelepartyClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string>("")
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const roomIdRef = useRef<string | undefined>(roomId)
-  const clientRef = useRef<TelepartyClient | null>(null)
+  
+  // User data from localStorage
+  const userNickname = useRef(localStorage.getItem("userNickname") || "Anonymous")
+  const userIcon = useRef(localStorage.getItem("userIcon") || "")
 
-  const userNicknameRef = useRef(localStorage.getItem("userNickname") || "Anonymous")
-  const userIconRef = useRef(localStorage.getItem("userIcon") || "")
-
-  const createEventHandler = useCallback((): SocketEventHandler => ({
-    onConnectionReady: async () => {
-      if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
-      if (clientRef.current) {
-        try {
-          await clientRef.current.joinChatRoom(
-            userNicknameRef.current,
-            roomIdRef.current || "",
-            userIconRef.current || undefined
-          )
-          setIsConnected(true)
-          setIsJoining(false)
-          setCurrentUserId("current-user")
-
-          const welcomeMessage: SessionChatMessage = {
-            isSystemMessage: true,
-            body: `Welcome to room ${roomIdRef.current}! You've joined as ${userNicknameRef.current}`,
-            permId: "system",
-            timestamp: Date.now(),
-            userNickname: "System",
-          }
-          setMessages((prev) => [welcomeMessage, ...prev])
-        } catch (err) {
-          setError("Failed to join room. Please try again.")
-          setIsJoining(false)
-        }
-      }
-    },
-    onClose: () => {
-      setIsConnected(false)
-    },
-    onMessage: (message) => {
-      if (message.type === SocketMessageTypes.SEND_MESSAGE) {
-        const chatMessage = message.data as SessionChatMessage
-
-        if (
-          chatMessage.userNickname === userNicknameRef.current &&
-          !chatMessage.isSystemMessage
-        ) {
-          setCurrentUserId(chatMessage.permId)
-        }
-
-        setMessages((prevMessages) => [...prevMessages, chatMessage])
-      } else if (message.type === SocketMessageTypes.SET_TYPING_PRESENCE) {
-        const typingData = message.data as TypingMessageData
-        setUsersTyping(typingData.usersTyping.filter(id => id !== currentUserId))
-      }
-    },
-  }), [currentUserId])
-
+  // Load chat history
   useEffect(() => {
-    const savedNickname = localStorage.getItem("userNickname")
-    const savedIcon = localStorage.getItem("userIcon")
-    const savedRoomId = localStorage.getItem("lastRoomId")
-
-    if (!savedNickname || !savedRoomId) {
-      navigate("/chat-application")
-      return
-    }
-
-    userNicknameRef.current = savedNickname
-    userIconRef.current = savedIcon || ""
-    roomIdRef.current = savedRoomId
-
-    connectionTimeoutRef.current = setTimeout(() => {
-      setIsJoining(false)
-      setError("Connection timeout. Please try again.")
-    }, 15000)
-
-    const newClient = new TelepartyClient(createEventHandler())
-    setClient(newClient)
-    clientRef.current = newClient
-
-    return () => {
-      if (connectionTimeoutRef.current) {
-        clearTimeout(connectionTimeoutRef.current)
-      }
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current)
-      }
-      if (clientRef.current) {
-        clientRef.current.teardown()
+    const savedHistory = localStorage.getItem(`${CHAT_HISTORY_KEY}_${roomId}`)
+    if (savedHistory) {
+      try {
+        const parsedHistory = JSON.parse(savedHistory)
+        setMessages(parsedHistory)
+      } catch (err) {
+        console.error("Failed to load chat history:", err)
       }
     }
-  }, [createEventHandler, navigate])
+  }, [roomId])
 
+  // Save chat history
+  useEffect(() => {
+    if (messages.length > 0) {
+      const historyToSave = messages.slice(-MAX_HISTORY_MESSAGES)
+      localStorage.setItem(`${CHAT_HISTORY_KEY}_${roomId}`, JSON.stringify(historyToSave))
+    }
+  }, [messages, roomId])
+
+  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  // Initialize WebSocket connection
+  const initializeConnection = useCallback(() => {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      return
+    }
+
+    isConnectingRef.current = true
+    hasJoinedRef.current = false
+
+    // Clear any existing timeouts
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current)
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+    }
+    if (joinTimeoutRef.current) {
+      clearTimeout(joinTimeoutRef.current)
+    }
+    if (initialConnectionTimeoutRef.current) {
+      clearTimeout(initialConnectionTimeoutRef.current)
+    }
+
+    // Clean up existing client before creating new one
+    if (clientRef.current) {
+      clientRef.current.teardown()
+    }
+
+    // Add delay before initial connection
+    initialConnectionTimeoutRef.current = setTimeout(() => {
+      // Set connection timeout
+      connectionTimeoutRef.current = setTimeout(() => {
+        isConnectingRef.current = false
+        setError("Connection timeout. Please try again.")
+        handleReconnect()
+      }, CONNECTION_TIMEOUT)
+
+      // Create event handler
+      const eventHandler: SocketEventHandler = {
+        onConnectionReady: () => {
+          console.log("Connection ready")
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current)
+          }
+
+          // Add delay before joining room
+          joinTimeoutRef.current = setTimeout(() => {
+            // Join the room
+            if (clientRef.current && roomId && !hasJoinedRef.current) {
+              hasJoinedRef.current = true
+              clientRef.current.joinChatRoom(
+                userNickname.current,
+                roomId,
+                userIcon.current || undefined
+              ).then(() => {
+                setIsConnected(true)
+                setError("")
+                isConnectingRef.current = false
+                setReconnectAttempts(0) // Reset reconnect attempts on successful connection
+              }).catch((err) => {
+                console.error("Failed to join room:", err)
+                setError("Failed to join room. Please try again.")
+                isConnectingRef.current = false
+                hasJoinedRef.current = false
+                handleReconnect()
+              })
+            }
+          }, JOIN_DELAY)
+        },
+        onClose: () => {
+          console.log("Connection closed")
+          setIsConnected(false)
+          isConnectingRef.current = false
+          hasJoinedRef.current = false
+          
+          // Clear all timeouts
+          if (joinTimeoutRef.current) {
+            clearTimeout(joinTimeoutRef.current)
+          }
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current)
+          }
+          
+          // Only attempt reconnect if we haven't exceeded max attempts
+          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            handleReconnect()
+          } else {
+            setError("Connection lost. Please refresh the page to try again.")
+          }
+        },
+        onMessage: (message) => {
+          if (message.type === SocketMessageTypes.SEND_MESSAGE) {
+            const chatMessage = message.data as SessionChatMessage
+            
+            if (chatMessage.userNickname === userNickname.current && !chatMessage.isSystemMessage) {
+              setCurrentUserId(chatMessage.permId)
+              chatMessage.isSent = true
+            } else {
+              chatMessage.isSent = false
+            }
+
+            if (!chatMessage.timestamp) {
+              chatMessage.timestamp = Date.now()
+            }
+
+            setMessages(prev => {
+              const isDuplicate = prev.some(
+                msg => msg.permId === chatMessage.permId && msg.timestamp === chatMessage.timestamp
+              )
+              return isDuplicate ? prev : [...prev, chatMessage]
+            })
+
+            // Update typing users when a message is sent
+            if (chatMessage.userNickname && chatMessage.permId) {
+              setTypingUsers(prev => {
+                const newTypingUsers = { ...prev }
+                delete newTypingUsers[chatMessage.permId]
+                return newTypingUsers
+              })
+            }
+          } else if (message.type === SocketMessageTypes.SET_TYPING_PRESENCE) {
+            handleTypingPresence(message.data as TypingMessageData)
+          }
+        },
+      }
+
+      // Create new client
+      try {
+        const newClient = new TelepartyClient(eventHandler)
+        clientRef.current = newClient
+      } catch (err) {
+        console.error("Failed to create client:", err)
+        isConnectingRef.current = false
+        handleReconnect()
+      }
+    }, INITIAL_CONNECTION_DELAY)
+  }, [roomId, reconnectAttempts])
+
+  // Handle reconnection
+  const handleReconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+    }
+
+    // Increment reconnect attempts
+    setReconnectAttempts(prev => prev + 1)
+
+    // Only attempt reconnect if we haven't exceeded max attempts
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectTimeoutRef.current = setTimeout(() => {
+        initializeConnection()
+      }, RECONNECT_DELAY)
+    } else {
+      setError("Failed to establish connection. Please refresh the page.")
+    }
+  }, [initializeConnection, reconnectAttempts])
+
+  // Initialize connection on mount
+  useEffect(() => {
+    if (!userNickname.current) {
+      navigate("/chat-application")
+      return
+    }
+
+    // Reset reconnect attempts on mount
+    setReconnectAttempts(0)
+    initializeConnection()
+
+    return () => {
+      // Clear all timeouts
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current)
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      if (joinTimeoutRef.current) {
+        clearTimeout(joinTimeoutRef.current)
+      }
+      if (initialConnectionTimeoutRef.current) {
+        clearTimeout(initialConnectionTimeoutRef.current)
+      }
+      if (clientRef.current) {
+        clientRef.current.teardown()
+      }
+      isConnectingRef.current = false
+      hasJoinedRef.current = false
+    }
+  }, [initializeConnection, navigate])
+
+  // Send message
   const sendMessage = async () => {
-    if (!messageInput.trim() || !client || !isConnected) return
+    if (!messageInput.trim() || !clientRef.current || !isConnected) return
 
     try {
       const messageData: SendMessageData = {
         body: messageInput,
       }
 
-      await client.sendMessage(SocketMessageTypes.SEND_MESSAGE, messageData)
+      await clientRef.current.sendMessage(SocketMessageTypes.SEND_MESSAGE, messageData)
       setMessageInput("")
       setIsTyping(false)
 
-      if (client) {
+      if (clientRef.current) {
         const typingData: SetTypingMessageData = { typing: false }
-        client.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
+        clientRef.current.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
       }
-    } catch {}
+    } catch (err) {
+      console.error("Failed to send message:", err)
+      setError("Failed to send message. Please try again.")
+    }
   }
 
+  // Handle input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessageInput(e.target.value)
 
     if (!isTyping && e.target.value.trim()) {
       setIsTyping(true)
-      if (client) {
+      if (clientRef.current) {
         const typingData: SetTypingMessageData = { typing: true }
-        client.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
+        clientRef.current.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
       }
     }
 
@@ -172,20 +331,22 @@ const ChatRoom: React.FC = () => {
     typingTimeoutRef.current = setTimeout(() => {
       if (isTyping) {
         setIsTyping(false)
-        if (client) {
+        if (clientRef.current) {
           const typingData: SetTypingMessageData = { typing: false }
-          client.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
+          clientRef.current.sendMessage(SocketMessageTypes.SET_TYPING_PRESENCE, typingData)
         }
       }
     }, 2000)
   }
 
+  // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       sendMessage()
     }
   }
 
+  // Copy room ID to clipboard
   const copyRoomIdToClipboard = () => {
     if (roomId) {
       navigator.clipboard.writeText(roomId)
@@ -202,9 +363,50 @@ const ChatRoom: React.FC = () => {
     }
   }
 
+  // Leave room
   const leaveRoom = () => {
-    navigate("/")
+    localStorage.removeItem(`${CHAT_HISTORY_KEY}_${roomId}`)
+    localStorage.removeItem("lastRoomId")
+    navigate("/chat-application")
   }
+
+  // Add this function to handle typing presence
+  const handleTypingPresence = useCallback((typingData: TypingMessageData) => {
+    // Update typing users list
+    const typingUsersList = typingData.usersTyping.filter(id => id !== currentUserId)
+    setUsersTyping(typingUsersList)
+
+    // Update typing users' nicknames
+    setTypingUsers(prev => {
+      const newTypingUsers = { ...prev }
+      
+      // If we have the full typing users map, use it
+      if (typingData.typingUsers) {
+        Object.assign(newTypingUsers, typingData.typingUsers)
+      }
+      
+      // Update individual user if provided
+      if (typingData.userId && typingData.userNickname) {
+        if (typingData.anyoneTyping) {
+          newTypingUsers[typingData.userId] = typingData.userNickname
+        } else {
+          delete newTypingUsers[typingData.userId]
+        }
+      }
+
+      // Look up missing names from messages
+      typingUsersList.forEach(userId => {
+        if (!newTypingUsers[userId]) {
+          const message = messages.find(m => m.permId === userId)
+          if (message?.userNickname) {
+            newTypingUsers[userId] = message.userNickname
+          }
+        }
+      })
+
+      return newTypingUsers
+    })
+  }, [currentUserId, messages])
 
   return (
     <div className="chat-room">
@@ -220,16 +422,16 @@ const ChatRoom: React.FC = () => {
           </div>
         </div>
         <div className="user-info">
-          <span className="user-nickname">{userNicknameRef.current}</span>
-          {userIconRef.current ? (
+          <span className="user-nickname">{userNickname.current}</span>
+          {userIcon.current ? (
             <img
-              src={userIconRef.current || "/placeholder.svg"}
+              src={userIcon.current}
               alt="User avatar"
               className="user-avatar"
             />
           ) : (
             <div className="user-avatar-placeholder">
-              {userNicknameRef.current.charAt(0).toUpperCase()}
+              {userNickname.current.charAt(0).toUpperCase()}
             </div>
           )}
         </div>
@@ -241,24 +443,44 @@ const ChatRoom: React.FC = () => {
       {error && <div className="error-banner">{error}</div>}
 
       <div className="chat-messages">
-        {isJoining ? (
+        {!isConnected ? (
           <div className="connecting-message">Connecting to chat room...</div>
         ) : (
           <>
             {messages.map((message, index) => (
-              <Message
-                key={index}
-                message={message}
-                isOwnMessage={
-                  message.userNickname === userNicknameRef.current &&
-                  !message.isSystemMessage
-                }
-                userNickname={userNicknameRef.current}
-                userIcon={userIconRef.current}
-              />
+              <div
+                key={`${message.permId}-${index}`}
+                className={`message ${message.isSent ? "sent-message" : "received-message"}`}
+              >
+                {!message.isSystemMessage && (
+                  <div className="message-header">
+                    <img
+                      src={message.userIcon || `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.userNickname}`}
+                      alt={`${message.userNickname}'s avatar`}
+                      className="user-avatar"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.userNickname}`
+                      }}
+                    />
+                    <span className="user-name">{message.userNickname}</span>
+                    <span className="message-time">
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
+                <div className={`message-content ${message.isSystemMessage ? "system-message" : ""}`}>
+                  {message.body}
+                </div>
+              </div>
             ))}
-            {usersTyping.length > 0 &&
-              !usersTyping.includes(currentUserId) && <TypingIndicator />}
+            {usersTyping.length > 0 && !usersTyping.includes(currentUserId) && (
+              <TypingIndicator 
+                typingUsers={usersTyping}
+                messages={messages}
+                typingUsersMap={typingUsers}
+              />
+            )}
           </>
         )}
         <div ref={messagesEndRef} />

@@ -98,6 +98,92 @@
     gap: 1rem;
 }
 
+.message {
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+    margin-bottom: 1rem;
+    position: relative;
+}
+
+/* Sent messages */
+.message.sent-message {
+    align-self: flex-end;
+    margin-left: auto;
+}
+
+.message.sent-message .message-header {
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+}
+
+.message.sent-message .message-content {
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 1rem 1rem 0 1rem;
+}
+
+/* Received messages */
+.message.received-message {
+    align-self: flex-start;
+    margin-right: auto;
+}
+
+.message.received-message .message-content {
+    background-color: var(--card-background);
+    border-radius: 1rem 1rem 1rem 0;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    padding: 0 0.5rem;
+}
+
+.message-content {
+    padding: 0.75rem 1rem;
+    box-shadow: var(--shadow-sm);
+    word-wrap: break-word;
+}
+
+.system-message {
+    align-self: center;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    max-width: 90%;
+}
+
+.user-name {
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-left: 0.5rem;
+}
+
+.sent-message .message-time {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Add some spacing between messages */
+.message + .message {
+    margin-top: 0.5rem;
+}
+
+/* Add some spacing between message groups */
+.message.received-message + .message.sent-message,
+.message.sent-message + .message.received-message {
+    margin-top: 1rem;
+}
+
 .connecting-message {
     text-align: center;
     color: var(--text-secondary);
@@ -179,5 +265,23 @@
 
     .chat-input {
         padding: 0.75rem 1rem;
+    }
+}
+
+.typing-indicator {
+    padding: 0.5rem 1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
     }
 }

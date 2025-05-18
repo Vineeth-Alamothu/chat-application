@@ -127,14 +127,35 @@ const Home: React.FC = () => {
         if (!isConnectionReady) {
           throw new Error("Connection timeout. Please try again.")
         }
+
+        // Add a small delay after connection is ready to ensure stability
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
       localStorage.setItem("userNickname", nickname)
       if (userIcon) localStorage.setItem("userIcon", userIcon)
 
-      const roomId = await client.createChatRoom(nickname, userIcon || undefined)
-
-      navigate(`/chat-application/chat/${roomId}`)
+      try {
+        const roomId = await client.createChatRoom(nickname, userIcon || undefined)
+        navigate(`/chat-application/chat/${roomId}`)
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("Connection isn't Ready yet")) {
+          setError("Please wait while we establish the connection...")
+          // Retry after a short delay
+          setTimeout(async () => {
+            if (client && isConnectionReady) {
+              try {
+                const roomId = await client.createChatRoom(nickname, userIcon || undefined)
+                navigate(`/chat-application/chat/${roomId}`)
+              } catch (retryErr) {
+                setError(`Failed to create room: ${retryErr instanceof Error ? retryErr.message : "Unknown error"}`)
+              }
+            }
+          }, 1000)
+        } else {
+          throw err
+        }
+      }
     } catch (err) {
       console.error("Failed to create room:", err)
       setError(`Failed to create room: ${err instanceof Error ? err.message : "Unknown error"}`)
