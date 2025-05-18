@@ -21,6 +21,22 @@ const Home: React.FC = () => {
     return /^[a-zA-Z0-9-_]+$/.test(roomId)
   }
 
+  useEffect(() => {
+    const savedNickname = localStorage.getItem("userNickname")
+    const savedIcon = localStorage.getItem("userIcon")
+    const savedRoomId = localStorage.getItem("lastRoomId")
+
+    if (savedNickname) {
+      setNickname(savedNickname)
+    }
+    if (savedIcon) {
+      setUserIcon(savedIcon)
+    }
+    if (savedRoomId) {
+      setJoinRoomId(savedRoomId)
+    }
+  }, [])
+
   const handleJoinRoom = useCallback(async () => {
     if (!joinRoomId) {
       setError("Please enter a room ID")
@@ -53,25 +69,6 @@ const Home: React.FC = () => {
       setIsConnecting(false)
     }
   }, [joinRoomId, nickname, userIcon, navigate])
-
-  useEffect(() => {
-    const savedNickname = localStorage.getItem("userNickname")
-    const savedIcon = localStorage.getItem("userIcon")
-    const savedRoomId = localStorage.getItem("lastRoomId")
-
-    if (savedNickname) {
-      setNickname(savedNickname)
-    }
-    if (savedIcon) {
-      setUserIcon(savedIcon)
-    }
-    if (savedRoomId) {
-      setJoinRoomId(savedRoomId)
-      if (savedNickname) {
-        handleJoinRoom()
-      }
-    }
-  }, [handleJoinRoom])
 
   useEffect(() => {
     const eventHandler: SocketEventHandler = {

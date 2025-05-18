@@ -28,6 +28,7 @@ interface TypingMessageData {
 
 interface SessionChatMessage extends BaseSessionChatMessage {
   isSent?: boolean
+  userIcon?: string
 }
 
 const CHAT_HISTORY_KEY = "chat_history"
@@ -123,12 +124,17 @@ const ChatRoom: React.FC = () => {
         functionsRef.current.initializeConnection()
       }, RECONNECT_DELAY)
     } else {
-      setError("Failed to establish connection. Please refresh the page.")
+      navigate('/chat-application/error')
     }
-  }, [reconnectAttempts])
+  }, [reconnectAttempts, navigate])
 
   const initializeConnection = useCallback(() => {
     if (isConnectingRef.current) {
+      return
+    }
+
+    if (!roomId) {
+      navigate('/chat-application/error')
       return
     }
 
@@ -180,10 +186,9 @@ const ChatRoom: React.FC = () => {
                 setReconnectAttempts(0)
               }).catch((err) => {
                 console.error("Failed to join room:", err)
-                setError("Failed to join room. Please try again.")
+                navigate('/chat-application/error')
                 isConnectingRef.current = false
                 hasJoinedRef.current = false
-                functionsRef.current.handleReconnect()
               })
             }
           }, JOIN_DELAY)
@@ -214,12 +219,17 @@ const ChatRoom: React.FC = () => {
             if (chatMessage.userNickname === userNickname.current && !chatMessage.isSystemMessage) {
               setCurrentUserId(chatMessage.permId)
               chatMessage.isSent = true
+              chatMessage.userIcon = userIcon.current
             } else {
               chatMessage.isSent = false
             }
 
             if (!chatMessage.timestamp) {
               chatMessage.timestamp = Date.now()
+            }
+
+            if (!chatMessage.userIcon) {
+              chatMessage.userIcon = `https://api.dicebear.com/7.x/avataaars/svg?seed=${chatMessage.userNickname || 'User'}`
             }
 
             setMessages(prev => {
@@ -251,7 +261,7 @@ const ChatRoom: React.FC = () => {
         functionsRef.current.handleReconnect()
       }
     }, INITIAL_CONNECTION_DELAY)
-  }, [roomId, reconnectAttempts])
+  }, [roomId, reconnectAttempts, navigate])
 
   useEffect(() => {
     functionsRef.current = {
@@ -442,16 +452,22 @@ const ChatRoom: React.FC = () => {
               >
                 {!message.isSystemMessage && (
                   <div className="message-header">
-                    <img
-                      src={message.userIcon || `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.userNickname}`}
-                      alt={`${message.userNickname}'s avatar`}
-                      className="user-avatar"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement
-                        target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.userNickname}`
-                      }}
-                    />
-                    <span className="user-name">{message.userNickname}</span>
+                    {message.userIcon ? (
+                      <img
+                        src={message.userIcon}
+                        alt={`${message.userNickname || 'User'}'s avatar`}
+                        className="user-avatar"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.userNickname || 'User'}`;
+                        }}
+                      />
+                    ) : (
+                      <div className="user-avatar-placeholder">
+                        {(message.userNickname || 'User').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="user-name">{message.userNickname || 'Anonymous'}</span>
                     <span className="message-time">
                       {new Date(message.timestamp).toLocaleTimeString()}
                     </span>
