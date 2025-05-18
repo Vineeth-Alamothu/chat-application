@@ -68,36 +68,68 @@ const ChatRoom: React.FC = () => {
   // User data from localStorage
   const userNickname = useRef(localStorage.getItem("userNickname") || "Anonymous")
   const userIcon = useRef(localStorage.getItem("userIcon") || "")
+  const functionsRef = useRef<{
+    handleReconnect: () => void;
+    handleTypingPresence: (data: TypingMessageData) => void;
+  }>({
+    handleReconnect: () => {},
+    handleTypingPresence: () => {},
+  });
 
-  // Load chat history
-  useEffect(() => {
-    const savedHistory = localStorage.getItem(`${CHAT_HISTORY_KEY}_${roomId}`)
-    if (savedHistory) {
-      try {
-        const parsedHistory = JSON.parse(savedHistory)
-        setMessages(parsedHistory)
-      } catch (err) {
-        console.error("Failed to load chat history:", err)
+  const handleTypingPresence = useCallback((typingData: TypingMessageData) => {
+    const typingUsersList = typingData.usersTyping.filter(id => id !== currentUserId)
+    setUsersTyping(typingUsersList)
+
+    setTypingUsers(prev => {
+      const newTypingUsers = { ...prev }
+      
+      if (typingData.typingUsers) {
+        Object.assign(newTypingUsers, typingData.typingUsers)
       }
+      
+      if (typingData.userId && typingData.userNickname) {
+        if (typingData.anyoneTyping) {
+          newTypingUsers[typingData.userId] = typingData.userNickname
+        } else {
+          delete newTypingUsers[typingData.userId]
+        }
+      }
+
+      typingUsersList.forEach(userId => {
+        if (!newTypingUsers[userId]) {
+          const message = messages.find(m => m.permId === userId)
+          if (message?.userNickname) {
+            newTypingUsers[userId] = message.userNickname
+          }
+        }
+      })
+
+      return newTypingUsers
+    })
+  }, [currentUserId, messages])
+
+  const handleReconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
     }
-  }, [roomId])
 
-  // Save chat history
-  useEffect(() => {
-    if (messages.length > 0) {
-      const historyToSave = messages.slice(-MAX_HISTORY_MESSAGES)
-      localStorage.setItem(`${CHAT_HISTORY_KEY}_${roomId}`, JSON.stringify(historyToSave))
+    setReconnectAttempts(prev => prev + 1)
+
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (clientRef.current) {
+          clientRef.current.teardown()
+        }
+        isConnectingRef.current = false
+        hasJoinedRef.current = false
+        initializeConnection()
+      }, RECONNECT_DELAY)
+    } else {
+      setError("Failed to establish connection. Please refresh the page.")
     }
-  }, [messages, roomId])
+  }, [reconnectAttempts])
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
-
-  // Initialize WebSocket connection
   const initializeConnection = useCallback(() => {
-    // Prevent multiple simultaneous connection attempts
     if (isConnectingRef.current) {
       return
     }
@@ -105,7 +137,6 @@ const ChatRoom: React.FC = () => {
     isConnectingRef.current = true
     hasJoinedRef.current = false
 
-    // Clear any existing timeouts
     if (connectionTimeoutRef.current) {
       clearTimeout(connectionTimeoutRef.current)
     }
@@ -119,21 +150,17 @@ const ChatRoom: React.FC = () => {
       clearTimeout(initialConnectionTimeoutRef.current)
     }
 
-    // Clean up existing client before creating new one
     if (clientRef.current) {
       clientRef.current.teardown()
     }
 
-    // Add delay before initial connection
     initialConnectionTimeoutRef.current = setTimeout(() => {
-      // Set connection timeout
       connectionTimeoutRef.current = setTimeout(() => {
         isConnectingRef.current = false
         setError("Connection timeout. Please try again.")
-        handleReconnect()
+        functionsRef.current.handleReconnect()
       }, CONNECTION_TIMEOUT)
 
-      // Create event handler
       const eventHandler: SocketEventHandler = {
         onConnectionReady: () => {
           console.log("Connection ready")
@@ -141,9 +168,7 @@ const ChatRoom: React.FC = () => {
             clearTimeout(connectionTimeoutRef.current)
           }
 
-          // Add delay before joining room
           joinTimeoutRef.current = setTimeout(() => {
-            // Join the room
             if (clientRef.current && roomId && !hasJoinedRef.current) {
               hasJoinedRef.current = true
               clientRef.current.joinChatRoom(
@@ -154,13 +179,13 @@ const ChatRoom: React.FC = () => {
                 setIsConnected(true)
                 setError("")
                 isConnectingRef.current = false
-                setReconnectAttempts(0) // Reset reconnect attempts on successful connection
+                setReconnectAttempts(0)
               }).catch((err) => {
                 console.error("Failed to join room:", err)
                 setError("Failed to join room. Please try again.")
                 isConnectingRef.current = false
                 hasJoinedRef.current = false
-                handleReconnect()
+                functionsRef.current.handleReconnect()
               })
             }
           }, JOIN_DELAY)
@@ -171,7 +196,6 @@ const ChatRoom: React.FC = () => {
           isConnectingRef.current = false
           hasJoinedRef.current = false
           
-          // Clear all timeouts
           if (joinTimeoutRef.current) {
             clearTimeout(joinTimeoutRef.current)
           }
@@ -179,9 +203,8 @@ const ChatRoom: React.FC = () => {
             clearTimeout(connectionTimeoutRef.current)
           }
           
-          // Only attempt reconnect if we haven't exceeded max attempts
           if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            handleReconnect()
+            functionsRef.current.handleReconnect()
           } else {
             setError("Connection lost. Please refresh the page to try again.")
           }
@@ -208,7 +231,6 @@ const ChatRoom: React.FC = () => {
               return isDuplicate ? prev : [...prev, chatMessage]
             })
 
-            // Update typing users when a message is sent
             if (chatMessage.userNickname && chatMessage.permId) {
               setTypingUsers(prev => {
                 const newTypingUsers = { ...prev }
@@ -217,43 +239,55 @@ const ChatRoom: React.FC = () => {
               })
             }
           } else if (message.type === SocketMessageTypes.SET_TYPING_PRESENCE) {
-            handleTypingPresence(message.data as TypingMessageData)
+            functionsRef.current.handleTypingPresence(message.data as TypingMessageData)
           }
         },
       }
 
-      // Create new client
       try {
         const newClient = new TelepartyClient(eventHandler)
         clientRef.current = newClient
       } catch (err) {
         console.error("Failed to create client:", err)
         isConnectingRef.current = false
-        handleReconnect()
+        functionsRef.current.handleReconnect()
       }
     }, INITIAL_CONNECTION_DELAY)
   }, [roomId, reconnectAttempts])
 
-  // Handle reconnection
-  const handleReconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
+  useEffect(() => {
+    functionsRef.current = {
+      handleReconnect,
+      handleTypingPresence,
+    };
+  }, [handleReconnect, handleTypingPresence]);
+
+  useEffect(() => {
+    const savedHistory = localStorage.getItem(`${CHAT_HISTORY_KEY}_${roomId}`)
+    if (savedHistory) {
+      try {
+        const parsedHistory = JSON.parse(savedHistory)
+        setMessages(parsedHistory)
+      } catch (err) {
+        console.error("Failed to load chat history:", err)
+      }
     }
+  }, [roomId])
 
-    // Increment reconnect attempts
-    setReconnectAttempts(prev => prev + 1)
-
-    // Only attempt reconnect if we haven't exceeded max attempts
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      reconnectTimeoutRef.current = setTimeout(() => {
-        initializeConnection()
-      }, RECONNECT_DELAY)
-    } else {
-      setError("Failed to establish connection. Please refresh the page.")
+  // Save chat history
+  useEffect(() => {
+    if (messages.length > 0) {
+      const historyToSave = messages.slice(-MAX_HISTORY_MESSAGES)
+      localStorage.setItem(`${CHAT_HISTORY_KEY}_${roomId}`, JSON.stringify(historyToSave))
     }
-  }, [initializeConnection, reconnectAttempts])
+  }, [messages, roomId])
 
-  // Initialize connection on mount
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+
+  // Initialize WebSocket connection
   useEffect(() => {
     if (!userNickname.current) {
       navigate("/chat-application")
@@ -369,44 +403,6 @@ const ChatRoom: React.FC = () => {
     localStorage.removeItem("lastRoomId")
     navigate("/chat-application")
   }
-
-  // Add this function to handle typing presence
-  const handleTypingPresence = useCallback((typingData: TypingMessageData) => {
-    // Update typing users list
-    const typingUsersList = typingData.usersTyping.filter(id => id !== currentUserId)
-    setUsersTyping(typingUsersList)
-
-    // Update typing users' nicknames
-    setTypingUsers(prev => {
-      const newTypingUsers = { ...prev }
-      
-      // If we have the full typing users map, use it
-      if (typingData.typingUsers) {
-        Object.assign(newTypingUsers, typingData.typingUsers)
-      }
-      
-      // Update individual user if provided
-      if (typingData.userId && typingData.userNickname) {
-        if (typingData.anyoneTyping) {
-          newTypingUsers[typingData.userId] = typingData.userNickname
-        } else {
-          delete newTypingUsers[typingData.userId]
-        }
-      }
-
-      // Look up missing names from messages
-      typingUsersList.forEach(userId => {
-        if (!newTypingUsers[userId]) {
-          const message = messages.find(m => m.permId === userId)
-          if (message?.userNickname) {
-            newTypingUsers[userId] = message.userNickname
-          }
-        }
-      })
-
-      return newTypingUsers
-    })
-  }, [currentUserId, messages])
 
   return (
     <div className="chat-room">
