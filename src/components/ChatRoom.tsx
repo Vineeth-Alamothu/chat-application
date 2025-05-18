@@ -34,6 +34,7 @@ const ChatRoom: React.FC = () => {
   const [isJoining, setIsJoining] = useState(true)
   const [isTyping, setIsTyping] = useState(false)
   const [usersTyping, setUsersTyping] = useState<string[]>([])
+  const [error, setError] = useState<string>("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string>("")
@@ -44,76 +45,88 @@ const ChatRoom: React.FC = () => {
   const userNicknameRef = useRef(localStorage.getItem("userNickname") || "Anonymous")
   const userIconRef = useRef(localStorage.getItem("userIcon") || "")
 
+  const createEventHandler = (): SocketEventHandler => ({
+    onConnectionReady: async () => {
+      if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
+      if (clientRef.current) {
+        try {
+          await clientRef.current.joinChatRoom(
+            userNicknameRef.current,
+            roomIdRef.current || "",
+            userIconRef.current || undefined
+          )
+          setIsConnected(true)
+          setIsJoining(false)
+          setCurrentUserId("current-user")
+
+          const welcomeMessage: SessionChatMessage = {
+            isSystemMessage: true,
+            body: `Welcome to room ${roomIdRef.current}! You've joined as ${userNicknameRef.current}`,
+            permId: "system",
+            timestamp: Date.now(),
+            userNickname: "System",
+          }
+          setMessages((prev) => [welcomeMessage, ...prev])
+        } catch (err) {
+          setError("Failed to join room. Please try again.")
+          setIsJoining(false)
+        }
+      }
+    },
+    onClose: () => {
+      setIsConnected(false)
+    },
+    onMessage: (message) => {
+      if (message.type === SocketMessageTypes.SEND_MESSAGE) {
+        const chatMessage = message.data as SessionChatMessage
+
+        if (
+          chatMessage.userNickname === userNicknameRef.current &&
+          !chatMessage.isSystemMessage
+        ) {
+          setCurrentUserId(chatMessage.permId)
+        }
+
+        setMessages((prevMessages) => [...prevMessages, chatMessage])
+      } else if (message.type === SocketMessageTypes.SET_TYPING_PRESENCE) {
+        const typingData = message.data as TypingMessageData
+        setUsersTyping(typingData.usersTyping.filter(id => id !== currentUserId))
+      }
+    },
+  })
+
   useEffect(() => {
+    const savedNickname = localStorage.getItem("userNickname")
+    const savedIcon = localStorage.getItem("userIcon")
+    const savedRoomId = localStorage.getItem("lastRoomId")
+
+    if (!savedNickname || !savedRoomId) {
+      navigate("/chat-application")
+      return
+    }
+
+    userNicknameRef.current = savedNickname
+    userIconRef.current = savedIcon || ""
+    roomIdRef.current = savedRoomId
+
     connectionTimeoutRef.current = setTimeout(() => {
       setIsJoining(false)
+      setError("Connection timeout. Please try again.")
     }, 15000)
 
-    const joinChatRoom = async (client: TelepartyClient) => {
-      if (!roomIdRef.current) {
-        setIsJoining(false)
-        return
-      }
-
-      try {
-        await client.joinChatRoom(
-          userNicknameRef.current,
-          roomIdRef.current,
-          userIconRef.current || undefined
-        )
-        setIsConnected(true)
-        setIsJoining(false)
-        setCurrentUserId("current-user")
-
-        const welcomeMessage: SessionChatMessage = {
-          isSystemMessage: true,
-          body: `Welcome to room ${roomIdRef.current}! You've joined as ${userNicknameRef.current}`,
-          permId: "system",
-          timestamp: Date.now(),
-          userNickname: "System",
-        }
-        setMessages([welcomeMessage])
-      } catch {
-        setIsJoining(false)
-      }
-    }
-
-    const eventHandler: SocketEventHandler = {
-      onConnectionReady: async () => {
-        if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
-        if (clientRef.current) {
-          await joinChatRoom(clientRef.current)
-        }
-      },
-      onClose: () => {
-        setIsConnected(false)
-      },
-      onMessage: (message) => {
-        if (message.type === SocketMessageTypes.SEND_MESSAGE) {
-          const chatMessage = message.data as SessionChatMessage
-
-          if (
-            chatMessage.userNickname === userNicknameRef.current &&
-            !chatMessage.isSystemMessage
-          ) {
-            setCurrentUserId(chatMessage.permId)
-          }
-
-          setMessages((prevMessages) => [...prevMessages, chatMessage])
-        } else if (message.type === SocketMessageTypes.SET_TYPING_PRESENCE) {
-          const typingData = message.data as TypingMessageData
-          setUsersTyping(typingData.usersTyping)
-        }
-      },
-    }
-
-    const newClient = new TelepartyClient(eventHandler)
+    const newClient = new TelepartyClient(createEventHandler())
     setClient(newClient)
     clientRef.current = newClient
 
     return () => {
       if (connectionTimeoutRef.current) {
         clearTimeout(connectionTimeoutRef.current)
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      if (clientRef.current) {
+        clientRef.current.teardown()
       }
     }
   }, [])

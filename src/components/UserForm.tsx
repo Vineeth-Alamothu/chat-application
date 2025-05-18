@@ -10,12 +10,9 @@ interface UserFormProps {
 }
 
 const AVATAR_OPTIONS = [
-  "/avatars/avatar1.png",
-  "/avatars/avatar2.png",
-  "/avatars/avatar3.png",
-  "/avatars/avatar4.png",
-  "/avatars/avatar5.png",
-  "/avatars/avatar6.png",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka",
+  "https://api.dicebear.com/7.x/avataaars/svg?seed=John",
 ]
 
 const UserForm: React.FC<UserFormProps> = ({ nickname, setNickname, userIcon, setUserIcon }) => {
@@ -34,7 +31,6 @@ const UserForm: React.FC<UserFormProps> = ({ nickname, setNickname, userIcon, se
       setCustomIconUrl("")
     }
   }
-
   return (
     <div className="user-form">
       <div className="input-group">

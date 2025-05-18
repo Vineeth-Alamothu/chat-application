@@ -17,9 +17,30 @@ const Home: React.FC = () => {
   const [isConnectionReady, setIsConnectionReady] = useState(false)
   const navigate = useNavigate()
 
-  // Initialize client when component mounts
+  const validateRoomId = (roomId: string) => {
+    return /^[a-zA-Z0-9-_]+$/.test(roomId)
+  }
+
   useEffect(() => {
-    // Create event handler
+    const savedNickname = localStorage.getItem("userNickname")
+    const savedIcon = localStorage.getItem("userIcon")
+    const savedRoomId = localStorage.getItem("lastRoomId")
+
+    if (savedNickname) {
+      setNickname(savedNickname)
+    }
+    if (savedIcon) {
+      setUserIcon(savedIcon)
+    }
+    if (savedRoomId) {
+      setJoinRoomId(savedRoomId)
+      if (savedNickname) {
+        handleJoinRoom()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const eventHandler: SocketEventHandler = {
       onConnectionReady: () => {
         console.log("Connection established for room creation")
@@ -34,9 +55,14 @@ const Home: React.FC = () => {
       },
     }
 
-    // Create a new client instance with the event handler
     const newClient = new TelepartyClient(eventHandler)
     setClient(newClient)
+
+    return () => {
+      if (newClient) {
+        newClient.teardown()
+      }
+    }
   }, [])
 
   const handleCreateRoom = async () => {
@@ -54,13 +80,11 @@ const Home: React.FC = () => {
       setIsConnecting(true)
       setError("")
 
-      // Wait for connection to be ready
       if (!isConnectionReady) {
         setError("Connecting to server...")
 
-        // Wait for connection to be ready (max 10 seconds)
         let attempts = 0
-        const maxAttempts = 20 // 10 seconds (500ms intervals)
+        const maxAttempts = 20 
 
         while (!isConnectionReady && attempts < maxAttempts) {
           await new Promise((resolve) => setTimeout(resolve, 500))
@@ -72,14 +96,11 @@ const Home: React.FC = () => {
         }
       }
 
-      // Set nickname in localStorage
       localStorage.setItem("userNickname", nickname)
       if (userIcon) localStorage.setItem("userIcon", userIcon)
 
-      // Create a chat room with nickname and userIcon
       const roomId = await client.createChatRoom(nickname, userIcon || undefined)
 
-      // Navigate to the chat room
       navigate(`/chat-application/chat/${roomId}`)
     } catch (err) {
       console.error("Failed to create room:", err)
@@ -95,21 +116,30 @@ const Home: React.FC = () => {
       return
     }
 
+    if (!validateRoomId(joinRoomId)) {
+      setError("Invalid room ID format")
+      return
+    }
+
     if (!nickname) {
       setError("Please enter a nickname")
       return
     }
 
     try {
-      // Store user info in localStorage
+      setIsConnecting(true)
+      setError("")
+
       localStorage.setItem("userNickname", nickname)
       if (userIcon) localStorage.setItem("userIcon", userIcon)
+      localStorage.setItem("lastRoomId", joinRoomId)
 
-      // Navigate to the chat room
       navigate(`/chat-application/chat/${joinRoomId}`)
     } catch (err) {
       setError("Failed to join room. Please try again.")
       console.error(err)
+    } finally {
+      setIsConnecting(false)
     }
   }
 
