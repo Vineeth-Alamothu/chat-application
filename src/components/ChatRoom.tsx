@@ -71,9 +71,11 @@ const ChatRoom: React.FC = () => {
   const functionsRef = useRef<{
     handleReconnect: () => void;
     handleTypingPresence: (data: TypingMessageData) => void;
+    initializeConnection: () => void;
   }>({
     handleReconnect: () => {},
     handleTypingPresence: () => {},
+    initializeConnection: () => {},
   });
 
   const handleTypingPresence = useCallback((typingData: TypingMessageData) => {
@@ -122,7 +124,7 @@ const ChatRoom: React.FC = () => {
         }
         isConnectingRef.current = false
         hasJoinedRef.current = false
-        initializeConnection()
+        functionsRef.current.initializeConnection()
       }, RECONNECT_DELAY)
     } else {
       setError("Failed to establish connection. Please refresh the page.")
@@ -259,8 +261,9 @@ const ChatRoom: React.FC = () => {
     functionsRef.current = {
       handleReconnect,
       handleTypingPresence,
+      initializeConnection,
     };
-  }, [handleReconnect, handleTypingPresence]);
+  }, [handleReconnect, handleTypingPresence, initializeConnection]);
 
   useEffect(() => {
     const savedHistory = localStorage.getItem(`${CHAT_HISTORY_KEY}_${roomId}`)
