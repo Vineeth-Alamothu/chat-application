@@ -17,7 +17,7 @@ const ErrorPage: React.FC = () => {
     keysToRemove.forEach(key => localStorage.removeItem(key));
     
     // Navigate to home page
-    navigate('/chat-application');
+    navigate('/');
   };
 
   return (

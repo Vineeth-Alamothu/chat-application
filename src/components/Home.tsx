@@ -61,7 +61,7 @@ const Home: React.FC = () => {
       if (userIcon) localStorage.setItem("userIcon", userIcon)
       localStorage.setItem("lastRoomId", joinRoomId)
 
-      navigate(`/chat-application/chat/${joinRoomId}`)
+      navigate(`/chat/${joinRoomId}`)
     } catch (err) {
       setError("Failed to join room. Please try again.")
       console.error(err)
@@ -134,7 +134,7 @@ const Home: React.FC = () => {
 
       try {
         const roomId = await client.createChatRoom(nickname, userIcon || undefined)
-        navigate(`/chat-application/chat/${roomId}`)
+        navigate(`/chat/${roomId}`)
       } catch (err) {
         if (err instanceof Error && err.message.includes("Connection isn't Ready yet")) {
           setError("Please wait while we establish the connection...")
@@ -143,7 +143,7 @@ const Home: React.FC = () => {
             if (client && isConnectionReady) {
               try {
                 const roomId = await client.createChatRoom(nickname, userIcon || undefined)
-                navigate(`/chat-application/chat/${roomId}`)
+                navigate(`/chat/${roomId}`)
               } catch (retryErr) {
                 setError(`Failed to create room: ${retryErr instanceof Error ? retryErr.message : "Unknown error"}`)
               }

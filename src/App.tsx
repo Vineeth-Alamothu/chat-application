@@ -1,5 +1,5 @@
 import type React from "react"
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
+import { HashRouter as Router, Routes, Route } from "react-router-dom"
 import Home from "./components/Home"
 import ChatRoom from "./components/ChatRoom"
 import ErrorPage from "./components/ErrorPage"
@@ -10,9 +10,9 @@ const App: React.FC = () => {
     <Router>
       <div className="app-container">
         <Routes>
-          <Route path="/chat-application" element={<Home />} />
-          <Route path="/chat-application/chat/:roomId" element={<ChatRoom />} />
-          <Route path="/chat-application/error" element={<ErrorPage />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/chat/:roomId" element={<ChatRoom />} />
+          <Route path="/error" element={<ErrorPage />} />
           <Route path="*" element={<ErrorPage />} />
         </Routes>
       </div>
