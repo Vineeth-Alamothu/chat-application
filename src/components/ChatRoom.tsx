@@ -106,7 +106,7 @@ const ChatRoom: React.FC = () => {
       return newTypingUsers
     })
   }, [currentUserId, messages])
-
+ 
   const handleReconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
